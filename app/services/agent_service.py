@@ -11,6 +11,9 @@ from mcp import Client
 from ollama import chat
 
 from app.core.observability import log_event
+from app.intents.llm_classifier import (
+    classify_intent_with_llm,
+)
 from app.mcp_server import mcp
 from app.intents.detector import (
     detect_direct_intent as detect_intent,
@@ -63,6 +66,8 @@ class AgentState(TypedDict, total=False):
     knowledge: str
     answer: str
     direct_intent: str | None
+    intent_source: str | None
+    intent_confidence: float | None
     degraded: bool
     warnings: list[str]
     response_mode: str
@@ -146,10 +151,12 @@ def detect_direct_intent(message: str) -> str | None:
 def is_fleetops_scope(
     message: str,
     direct_intent: str | None = None,
+    has_service_order_context: bool = False,
 ) -> bool:
     return check_fleetops_scope(
         message,
         direct_intent,
+        has_service_order_context,
     )
 
 
@@ -166,6 +173,11 @@ async def scope_guard(
         state.get(
             "direct_intent"
         ),
+        bool(
+            state.get(
+                "service_order_id"
+            )
+        ),
     )
 
     return {
@@ -178,14 +190,17 @@ def route_after_scope_guard(
     state: AgentState,
 ) -> str:
 
-    route = (
-        "out_of_scope"
-        if state.get(
-            "out_of_scope",
-            False,
-        )
-        else "diagnostic"
-    )
+    if state.get(
+        "out_of_scope",
+        False,
+    ):
+        route = "out_of_scope"
+    elif state.get(
+        "direct_intent"
+    ):
+        route = "diagnostic"
+    else:
+        route = "classify_intent"
 
     log_event(
         "agent_scope_decision",
@@ -207,6 +222,63 @@ def route_after_scope_guard(
     )
 
     return route
+
+
+async def classify_intent(
+    state: AgentState,
+) -> dict:
+    trace_id = state.get("trace_id")
+    question = state.get("question", "")
+
+    try:
+        classification = classify_intent_with_llm(
+            question,
+            trace_id=trace_id,
+        )
+
+        return {
+            "direct_intent":
+                classification.intent,
+
+            "intent_source":
+                "llm"
+                if classification.intent
+                else None,
+
+            "intent_confidence":
+                classification.confidence,
+
+            "out_of_scope":
+                classification.out_of_scope,
+        }
+
+    except Exception as exc:
+        log_event(
+            "dependency_failed",
+            trace_id=trace_id,
+            dependency="ollama:intent_classifier",
+            error=str(exc),
+            fallback="continue_without_intent_classification",
+        )
+
+        return {
+            "direct_intent": None,
+            "intent_source": None,
+            "intent_confidence": None,
+            "out_of_scope": False,
+        }
+
+
+def route_after_intent_classifier(
+    state: AgentState,
+) -> str:
+    if state.get(
+        "out_of_scope",
+        False,
+    ):
+        return "out_of_scope"
+
+    return "diagnostic"
 
 
 async def out_of_scope_answer(
@@ -982,6 +1054,11 @@ def build_agent_graph(checkpointer):
     )
 
     builder.add_node(
+        "classify_intent",
+        classify_intent,
+    )
+
+    builder.add_node(
         "diagnostic",
         get_diagnostic,
     )
@@ -1011,6 +1088,7 @@ def build_agent_graph(checkpointer):
         route_after_scope_guard,
         {
             "out_of_scope": "out_of_scope",
+            "classify_intent": "classify_intent",
             "diagnostic": "diagnostic",
         },
     )
@@ -1018,6 +1096,15 @@ def build_agent_graph(checkpointer):
     builder.add_edge(
         "out_of_scope",
         END,
+    )
+
+    builder.add_conditional_edges(
+        "classify_intent",
+        route_after_intent_classifier,
+        {
+            "out_of_scope": "out_of_scope",
+            "diagnostic": "diagnostic",
+        },
     )
 
     builder.add_conditional_edges(
@@ -1090,6 +1177,16 @@ async def run_agent(
 
         "direct_intent":
             direct_intent,
+
+        "intent_source":
+            "pattern"
+            if direct_intent
+            else None,
+
+        "intent_confidence":
+            1.0
+            if direct_intent
+            else None,
 
         "degraded":
             False,
