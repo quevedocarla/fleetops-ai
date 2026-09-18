@@ -120,8 +120,54 @@ def extract_service_order_id(message: str) -> int | None:
     return int(match.group(1))
 
 
+def _service_type_label(value: str | None) -> str:
+    labels = {
+        "INSTALLATION": "instalação",
+        "MAINTENANCE": "manutenção",
+        "CANCELLATION": "cancelamento",
+    }
+    return labels.get(str(value or "").upper(), str(value or "").lower())
+
+
+def extract_requested_service_order_type(
+    message: str,
+) -> str | None:
+    text = normalize_text(message).strip(" ?.!")
+
+    candidates = {
+        "manutencao": "MAINTENANCE",
+        "instalacao": "INSTALLATION",
+        "cancelamento": "CANCELLATION",
+    }
+
+    prefixes = (
+        "",
+        "e ",
+        "esta ",
+        "esta em ",
+        "ela e ",
+        "ela esta ",
+        "ela esta em ",
+        "a os e ",
+        "a os esta ",
+        "a os esta em ",
+    )
+
+    for label, internal_type in candidates.items():
+        if text in {f"{prefix}{label}" for prefix in prefixes}:
+            return internal_type
+
+    return None
+
+
 def detect_direct_intent(message: str) -> str | None:
-    text = normalize_text(message)
+    text = normalize_text(message).strip()
+
+    if re.fullmatch(
+        r"(?:a\s+)?(?:os|ordem de servico)\s*[:#-]?\s*\d+\s*[?.!]?",
+        text,
+    ):
+        return "service_order_summary"
 
     if any(
         pattern in text
@@ -134,30 +180,76 @@ def detect_direct_intent(message: str) -> str | None:
     ):
         return "contract_status"
 
-    if any(
-        pattern in text
-        for pattern in [
-            "qual e o contrato",
-            "qual o contrato",
-            "numero do contrato",
-            "contrato dela",
-            "contrato dessa os",
-            "contrato desta os",
-        ]
+    contract_text = text.strip(" ?.!")
+
+    if (
+        contract_text in {
+            "contrato",
+            "o contrato",
+            "e o contrato",
+            "qual contrato",
+        }
+        or any(
+            pattern in contract_text
+            for pattern in [
+                "qual e o contrato",
+                "qual o contrato",
+                "qual contrato esta vinculado",
+                "qual contrato esta associado",
+                "contrato vinculado",
+                "contrato associado",
+                "numero do contrato",
+                "contrato dela",
+                "contrato dessa os",
+                "contrato desta os",
+                "contrato dessa ordem",
+                "contrato desta ordem",
+            ]
+        )
     ):
         return "contract_number"
 
-    if any(
-        pattern in text
-        for pattern in [
-            "qual e a placa",
-            "qual a placa",
-            "placa da os",
-            "placa dela",
-            "qual placa",
-        ]
+    plate_text = text.strip(" ?.!")
+
+    if plate_text.startswith("e "):
+        plate_text = plate_text[2:].strip()
+
+    if (
+        plate_text in {
+            "placa",
+            "a placa",
+        }
+        or any(
+            pattern in plate_text
+            for pattern in [
+                "qual e a placa",
+                "qual a placa",
+                "placa da os",
+                "placa dessa os",
+                "placa desta os",
+                "placa dela",
+                "qual placa",
+            ]
+        )
     ):
         return "vehicle_plate"
+
+    if (
+        text.strip(" ?.!") in {"tipo", "o tipo"}
+        or any(
+            pattern in text
+            for pattern in [
+                "tipo da os",
+                "qual e o tipo",
+                "qual o tipo",
+                "tipo dela",
+                "tipo dessa os",
+                "tipo desta os",
+            ]
+        )
+        or extract_requested_service_order_type(message) is not None
+    ):
+        return "service_order_type"
 
     if any(
         pattern in text
@@ -170,13 +262,16 @@ def detect_direct_intent(message: str) -> str | None:
     ):
         return "service_order_status"
 
-    if any(
-        pattern in text
-        for pattern in [
-            "status da fila",
-            "situacao da fila",
-            "como esta a fila",
-        ]
+    if (
+        text.strip(" ?.!") in {"fila", "a fila"}
+        or any(
+            pattern in text
+            for pattern in [
+                "status da fila",
+                "situacao da fila",
+                "como esta a fila",
+            ]
+        )
     ):
         return "queue_status"
 
@@ -192,7 +287,6 @@ def detect_direct_intent(message: str) -> str | None:
         return "queue_error"
 
     return None
-
 
 
 def is_fleetops_scope(
@@ -540,6 +634,7 @@ async def direct_answer(state: AgentState) -> dict:
 
     service_order_id = state["service_order_id"]
     intent = state.get("direct_intent")
+    question = state.get("question", "")
 
     log_event(
         "node_started",
@@ -550,98 +645,111 @@ async def direct_answer(state: AgentState) -> dict:
 
     if intent == "contract_number":
         contract_id = contract.get("id")
-
         if contract_id is None:
-            answer = (
-                f"A OS {service_order_id} "
-                "não possui contrato associado."
-            )
+            answer = f"A OS {service_order_id} não possui contrato associado."
         else:
-            answer = (
-                f"O contrato da OS "
-                f"{service_order_id} "
-                f"é o {contract_id}."
-            )
+            answer = f"O contrato da OS {service_order_id} é o {contract_id}."
 
     elif intent == "contract_status":
         contract_id = contract.get("id")
         contract_status = contract.get("status")
-
         if contract_id is None:
-            answer = (
-                f"A OS {service_order_id} "
-                "não possui contrato associado."
-            )
+            answer = f"A OS {service_order_id} não possui contrato associado."
         else:
-            translated_status = normalize_user_answer(
-                str(contract_status)
-            )
-            answer = (
-                f"O contrato {contract_id} "
-                f"está {translated_status}."
-            )
+            translated_status = normalize_user_answer(str(contract_status))
+            answer = f"O contrato {contract_id} está {translated_status}."
 
     elif intent == "vehicle_plate":
         plate = service_order.get("vehicle_plate")
-        answer = (
-            f"A placa da OS "
-            f"{service_order_id} "
-            f"é {plate}."
-        )
+        if plate:
+            answer = f"A placa da OS {service_order_id} é {plate}."
+        else:
+            answer = f"A OS {service_order_id} não possui placa informada."
+
+    elif intent == "service_order_type":
+        service_type = service_order.get("type")
+
+        if not service_type:
+            answer = f"A OS {service_order_id} não possui tipo informado."
+        else:
+            type_label = _service_type_label(service_type)
+            requested_type = extract_requested_service_order_type(question)
+
+            if requested_type is None:
+                answer = f"A OS {service_order_id} é do tipo {type_label}."
+            elif str(service_type).upper() == requested_type:
+                answer = f"Sim. A OS {service_order_id} é do tipo {type_label}."
+            else:
+                requested_label = _service_type_label(requested_type)
+                answer = (
+                    f"Não. A OS {service_order_id} é do tipo {type_label}, "
+                    f"não {requested_label}."
+                )
+
+    elif intent == "service_order_summary":
+        operational_status = service_order.get("status")
+        service_type = service_order.get("type")
+        plate = service_order.get("vehicle_plate")
+        contract_id = contract.get("id")
+        contract_status = contract.get("status")
+        queue_status = queue.get("status") if queue else None
+        diagnostic_status = diagnostic.get("diagnostic_status")
+
+        operational_label = normalize_user_answer(str(operational_status))
+        type_label = _service_type_label(service_type)
+        diagnostic_label = normalize_user_answer(str(diagnostic_status))
+
+        parts = [
+            (
+                f"A OS {service_order_id} está com status operacional "
+                f"{operational_label}, é do tipo {type_label}"
+                + (f" e está vinculada à placa {plate}" if plate else "")
+                + "."
+            )
+        ]
+
+        if contract_id is not None:
+            contract_label = normalize_user_answer(str(contract_status))
+            parts.append(f"O contrato {contract_id} está {contract_label}.")
+
+        if queue_status:
+            queue_label = normalize_user_answer(str(queue_status))
+            parts.append(f"A fila está {queue_label}.")
+        else:
+            parts.append("Não há fila de processamento.")
+
+        parts.append(f"O diagnóstico da OS é {diagnostic_label}.")
+        answer = " ".join(parts)
 
     elif intent == "service_order_status":
         operational_status = service_order.get("status")
-        diagnostic_status = diagnostic.get(
-            "diagnostic_status"
-        )
-
-        translated_operational = normalize_user_answer(
-            str(operational_status)
-        )
-        translated_diagnostic = normalize_user_answer(
-            str(diagnostic_status)
-        )
-
+        diagnostic_status = diagnostic.get("diagnostic_status")
+        operational_label = normalize_user_answer(str(operational_status))
+        diagnostic_label = normalize_user_answer(str(diagnostic_status))
         answer = (
-            f"A OS {service_order_id} está com status "
-            f"operacional {translated_operational} "
-            f"e diagnóstico {translated_diagnostic}."
+            f"A OS {service_order_id} está com status operacional "
+            f"{operational_label} e diagnóstico {diagnostic_label}."
         )
 
     elif intent == "queue_status":
         if not queue:
-            answer = (
-                f"A OS {service_order_id} "
-                "não possui fila de processamento."
-            )
+            answer = f"A OS {service_order_id} não possui fila de processamento."
         else:
-            queue_status = queue.get("status")
-            translated_queue = normalize_user_answer(
-                str(queue_status)
-            )
-
+            queue_status = normalize_user_answer(str(queue.get("status")))
             answer = (
-                f"A fila da OS {service_order_id} "
-                f"está com status {translated_queue}."
+                f"A fila da OS {service_order_id} está com status "
+                f"{queue_status}."
             )
 
     elif intent == "queue_error":
         if not queue:
-            answer = (
-                f"A OS {service_order_id} "
-                "não possui fila de processamento."
-            )
+            answer = f"A OS {service_order_id} não possui fila de processamento."
         else:
             queue_error = queue.get("error")
-
             if queue_error:
-                translated_error = normalize_user_answer(
-                    str(queue_error)
-                )
-
+                translated_error = normalize_user_answer(str(queue_error))
                 answer = (
-                    f"O erro da fila da OS "
-                    f"{service_order_id} é: "
+                    f"O erro da fila da OS {service_order_id} é: "
                     f"{translated_error}."
                 )
             else:
@@ -651,15 +759,9 @@ async def direct_answer(state: AgentState) -> dict:
                 )
 
     else:
-        answer = (
-            "Não foi possível identificar "
-            "a informação solicitada."
-        )
+        answer = "Não foi possível identificar a informação solicitada."
 
-    duration = round(
-        (time.perf_counter() - start) * 1000,
-        2,
-    )
+    duration = round((time.perf_counter() - start) * 1000, 2)
 
     log_event(
         "direct_answer_completed",
