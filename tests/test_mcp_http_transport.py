@@ -2,28 +2,27 @@ import asyncio
 import json
 import os
 
+import pytest
 from mcp import Client
 
 
-MCP_URL = os.getenv(
-    "MCP_SERVER_URL",
-    "http://127.0.0.1:8001/mcp",
-)
+MCP_URL = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8001/mcp")
+RUN_MCP_RAG_TEST = os.getenv("RUN_MCP_RAG_TEST", "0").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _extract_json(result):
-    assert not getattr(result, "isError", False), (
-        f"MCP tool retornou erro: {result.content}"
-    )
-
     assert result.content, "MCP tool retornou conteúdo vazio."
 
     text = getattr(result.content[0], "text", None)
-    assert text is not None, (
-        f"Conteúdo MCP inesperado: {result.content}"
-    )
+    assert text is not None, f"Conteúdo MCP inesperado: {result.content}"
 
-    return json.loads(text)
+    if text.startswith("Error executing tool"):
+        raise AssertionError(f"MCP tool retornou erro: {text}")
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise AssertionError(f"Resposta MCP não é JSON válido: {text}") from exc
 
 
 async def _list_expected_tools():
@@ -57,10 +56,7 @@ async def _rag_tool():
         result = await client.call_tool(
             "search_knowledge",
             {
-                "query": (
-                    "Quando uma OS de instalação "
-                    "pode ser processada?"
-                ),
+                "query": "Quando uma OS de instalação pode ser processada?",
                 "limit": 3,
                 "trace_id": "pytest-mcp-http",
             },
@@ -71,10 +67,7 @@ async def _rag_tool():
     assert isinstance(payload, list)
     assert payload, "A busca RAG não retornou resultados."
 
-    combined = "\n".join(
-        item.get("content", "")
-        for item in payload
-    )
+    combined = "\n".join(item.get("content", "") for item in payload)
 
     assert "CONTR-001" in combined
     assert "ACTIVE" in combined
@@ -88,5 +81,9 @@ def test_mcp_http_diagnostic_tool():
     asyncio.run(_diagnostic_tool())
 
 
+@pytest.mark.skipif(
+    not RUN_MCP_RAG_TEST,
+    reason="RAG via MCP requer Ollama + embeddings + base ingerida; roda na integração completa.",
+)
 def test_mcp_http_rag_tool():
     asyncio.run(_rag_tool())
