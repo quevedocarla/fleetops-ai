@@ -12,6 +12,19 @@ from ollama import chat
 
 from app.core.observability import log_event
 from app.mcp_server import mcp
+from app.intents.detector import (
+    detect_direct_intent as detect_intent,
+    extract_requested_service_order_type as detect_requested_service_order_type,
+)
+from app.intents.normalizer import (
+    extract_service_order_id as extract_os_id,
+    normalize_text as normalize_intent_text,
+)
+from app.policies.premise_validator import build_premise_response
+from app.policies.scope_guard import (
+    is_fleetops_scope as check_fleetops_scope,
+)
+
 
 
 MODEL = "qwen2.5:1.5b-instruct"
@@ -64,13 +77,8 @@ def ns_to_ms(value) -> float:
 
 
 def normalize_text(text: str) -> str:
-    normalized = unicodedata.normalize("NFD", text)
-    normalized = "".join(
-        char
-        for char in normalized
-        if unicodedata.category(char) != "Mn"
-    )
-    return normalized.lower().strip()
+    return normalize_intent_text(text)
+
 
 
 def normalize_user_answer(text: str) -> str:
@@ -110,14 +118,8 @@ def normalize_user_answer(text: str) -> str:
 
 
 def extract_service_order_id(message: str) -> int | None:
-    match = re.search(
-        r"\bOS\s*[:#-]?\s*(\d+)\b",
-        message,
-        flags=re.IGNORECASE,
-    )
-    if not match:
-        return None
-    return int(match.group(1))
+    return extract_os_id(message)
+
 
 
 def _service_type_label(value: str | None) -> str:
@@ -132,207 +134,24 @@ def _service_type_label(value: str | None) -> str:
 def extract_requested_service_order_type(
     message: str,
 ) -> str | None:
-    text = normalize_text(message).strip(" ?.!")
+    return detect_requested_service_order_type(message)
 
-    candidates = {
-        "manutencao": "MAINTENANCE",
-        "instalacao": "INSTALLATION",
-        "cancelamento": "CANCELLATION",
-    }
-
-    prefixes = (
-        "",
-        "e ",
-        "esta ",
-        "esta em ",
-        "ela e ",
-        "ela esta ",
-        "ela esta em ",
-        "a os e ",
-        "a os esta ",
-        "a os esta em ",
-    )
-
-    for label, internal_type in candidates.items():
-        if text in {f"{prefix}{label}" for prefix in prefixes}:
-            return internal_type
-
-    return None
 
 
 def detect_direct_intent(message: str) -> str | None:
-    text = normalize_text(message).strip()
+    return detect_intent(message)
 
-    if re.fullmatch(
-        r"(?:a\s+)?(?:os|ordem de servico)\s*[:#-]?\s*\d+\s*[?.!]?",
-        text,
-    ):
-        return "service_order_summary"
-
-    if any(
-        pattern in text
-        for pattern in [
-            "status do contrato",
-            "situacao do contrato",
-            "contrato esta ativo",
-            "contrato esta inativo",
-        ]
-    ):
-        return "contract_status"
-
-    contract_text = text.strip(" ?.!")
-
-    if (
-        contract_text in {
-            "contrato",
-            "o contrato",
-            "e o contrato",
-            "qual contrato",
-        }
-        or any(
-            pattern in contract_text
-            for pattern in [
-                "qual e o contrato",
-                "qual o contrato",
-                "qual contrato esta vinculado",
-                "qual contrato esta associado",
-                "contrato vinculado",
-                "contrato associado",
-                "numero do contrato",
-                "contrato dela",
-                "contrato dessa os",
-                "contrato desta os",
-                "contrato dessa ordem",
-                "contrato desta ordem",
-            ]
-        )
-    ):
-        return "contract_number"
-
-    plate_text = text.strip(" ?.!")
-
-    if plate_text.startswith("e "):
-        plate_text = plate_text[2:].strip()
-
-    if (
-        plate_text in {
-            "placa",
-            "a placa",
-        }
-        or any(
-            pattern in plate_text
-            for pattern in [
-                "qual e a placa",
-                "qual a placa",
-                "placa da os",
-                "placa dessa os",
-                "placa desta os",
-                "placa dela",
-                "qual placa",
-            ]
-        )
-    ):
-        return "vehicle_plate"
-
-    if (
-        text.strip(" ?.!") in {"tipo", "o tipo"}
-        or any(
-            pattern in text
-            for pattern in [
-                "tipo da os",
-                "qual e o tipo",
-                "qual o tipo",
-                "tipo dela",
-                "tipo dessa os",
-                "tipo desta os",
-            ]
-        )
-        or extract_requested_service_order_type(message) is not None
-    ):
-        return "service_order_type"
-
-    if any(
-        pattern in text
-        for pattern in [
-            "status da os",
-            "situacao da os",
-            "qual e o status da os",
-            "qual o status da os",
-        ]
-    ):
-        return "service_order_status"
-
-    if (
-        text.strip(" ?.!") in {"fila", "a fila"}
-        or any(
-            pattern in text
-            for pattern in [
-                "status da fila",
-                "situacao da fila",
-                "como esta a fila",
-            ]
-        )
-    ):
-        return "queue_status"
-
-    if any(
-        pattern in text
-        for pattern in [
-            "erro da fila",
-            "qual e o erro da fila",
-            "qual o erro da fila",
-            "erro de processamento",
-        ]
-    ):
-        return "queue_error"
-
-    return None
 
 
 def is_fleetops_scope(
     message: str,
     direct_intent: str | None = None,
 ) -> bool:
-    """
-    Valida se a pergunta pertence ao dominio FleetOps.
-
-    Perguntas fora do dominio sao encerradas antes
-    de diagnostico, RAG e LLM.
-    """
-
-    if direct_intent:
-        return True
-
-    if extract_service_order_id(
-        message
-    ) is not None:
-        return True
-
-    text = normalize_text(
-        message
+    return check_fleetops_scope(
+        message,
+        direct_intent,
     )
 
-    domain_terms = [
-        "ordem de servico",
-        "ordem servico",
-        "contrato",
-        "placa",
-        "fila",
-        "processamento",
-        "bloquead",
-        "pendente",
-        "instalacao",
-        "manutencao",
-        "cancelamento",
-        "diagnostico",
-        "veiculo",
-        "servico",
-    ]
-
-    return any(
-        term in text
-        for term in domain_terms
-    )
 
 
 async def scope_guard(
@@ -505,7 +324,13 @@ def route_after_diagnostic(state: AgentState) -> str:
     diagnostic_status = diagnostic.get("diagnostic_status")
     direct_intent = state.get("direct_intent")
 
-    if direct_intent:
+    if direct_intent == "why_blocked":
+        route = (
+            "knowledge"
+            if diagnostic_status == "BLOCKED"
+            else "direct_answer"
+        )
+    elif direct_intent:
         route = "direct_answer"
     elif diagnostic_status == "BLOCKED":
         route = "knowledge"
@@ -643,7 +468,15 @@ async def direct_answer(state: AgentState) -> dict:
         direct_intent=intent,
     )
 
-    if intent == "contract_number":
+    premise_answer = build_premise_response(
+        intent=intent,
+        diagnostic=diagnostic,
+        service_order_id=service_order_id,
+    )
+
+    if premise_answer is not None:
+        answer = premise_answer
+    elif intent == "contract_number":
         contract_id = contract.get("id")
         if contract_id is None:
             answer = f"A OS {service_order_id} não possui contrato associado."
