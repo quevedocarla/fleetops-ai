@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  core-tests:
+    name: Core tests + Docker smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare Docker environment
+        shell: bash
+        run: |
+          cp .env.docker.example .env.docker
+          sed -i 's/change_me/ci_password/g' .env.docker
+
+      - name: Build containers
+        run: docker compose build
+
+      - name: Start services
+        run: docker compose up -d
+
+      - name: Wait for API health
+        shell: bash
+        run: |
+          for i in {1..30}; do
+            STATUS="$(docker inspect --format='{{.State.Health.Status}}' fleetops-api 2>/dev/null || true)"
+            echo "fleetops-api health: ${STATUS:-not-ready}"
+            if [ "$STATUS" = "healthy" ]; then
+              exit 0
+            fi
+            sleep 5
+          done
+
+          docker compose ps
+          docker compose logs api
+          exit 1
+
+      - name: Install test dependency in API container
+        run: docker compose exec -T api pip install --no-cache-dir -r requirements-test.txt
+
+      - name: Run core tests
+        run: |
+          docker compose exec -T api python -m pytest             tests/test_agent_unit.py             tests/test_knowledge_chunking.py             tests/test_scope_guard.py
+
+      - name: Show container status
+        if: always()
+        run: docker compose ps
+
+      - name: Show API logs on failure
+        if: failure()
+        run: docker compose logs api
+
+      - name: Stop containers
+        if: always()
+        run: docker compose down -v

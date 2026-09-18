@@ -1,0 +1,91 @@
+name: Full Integration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-integration:
+    name: Full 32-test integration suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Ollama
+        shell: bash
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+
+      - name: Start Ollama
+        shell: bash
+        run: |
+          OLLAMA_HOST=0.0.0.0:11434 nohup ollama serve >/tmp/ollama.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/ollama.log
+          exit 1
+
+      - name: Pull Ollama models
+        run: |
+          ollama pull qwen2.5:1.5b-instruct
+          ollama pull embeddinggemma
+
+      - name: Prepare Docker environment
+        shell: bash
+        run: |
+          cp .env.docker.example .env.docker
+          sed -i 's/change_me/ci_password/g' .env.docker
+
+      - name: Build and start FleetOps
+        run: docker compose up -d --build
+
+      - name: Wait for API health
+        shell: bash
+        run: |
+          for i in {1..30}; do
+            STATUS="$(docker inspect --format='{{.State.Health.Status}}' fleetops-api 2>/dev/null || true)"
+            echo "fleetops-api health: ${STATUS:-not-ready}"
+            if [ "$STATUS" = "healthy" ]; then
+              exit 0
+            fi
+            sleep 5
+          done
+
+          docker compose ps
+          docker compose logs api
+          exit 1
+
+      - name: Ingest RAG knowledge
+        run: docker compose exec -T api python -m app.ingest_knowledge
+
+      - name: Install test dependency in API container
+        run: docker compose exec -T api pip install --no-cache-dir -r requirements-test.txt
+
+      - name: Run all tests
+        run: docker compose exec -T api python -m pytest
+
+      - name: Show container status
+        if: always()
+        run: docker compose ps
+
+      - name: Show API logs on failure
+        if: failure()
+        run: docker compose logs api
+
+      - name: Show Ollama logs on failure
+        if: failure()
+        shell: bash
+        run: cat /tmp/ollama.log || true
+
+      - name: Stop containers
+        if: always()
+        run: docker compose down -v
