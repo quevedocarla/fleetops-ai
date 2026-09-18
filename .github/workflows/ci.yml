@@ -31,28 +31,45 @@ jobs:
       - name: Start services
         run: docker compose up -d
 
-      - name: Wait for API health
+      - name: Wait for API and MCP health
         shell: bash
         run: |
           for i in {1..30}; do
-            STATUS="$(docker inspect --format='{{.State.Health.Status}}' fleetops-api 2>/dev/null || true)"
-            echo "fleetops-api health: ${STATUS:-not-ready}"
-            if [ "$STATUS" = "healthy" ]; then
+            API_STATUS="$(docker inspect --format='{{.State.Health.Status}}' fleetops-api 2>/dev/null || true)"
+            MCP_STATUS="$(docker inspect --format='{{.State.Health.Status}}' fleetops-mcp 2>/dev/null || true)"
+
+            echo "fleetops-api health: ${API_STATUS:-not-ready}"
+            echo "fleetops-mcp health: ${MCP_STATUS:-not-ready}"
+
+            if [ "$API_STATUS" = "healthy" ] && [ "$MCP_STATUS" = "healthy" ]; then
               exit 0
             fi
+
             sleep 5
           done
 
           docker compose ps
           docker compose logs api
+          docker compose logs mcp
           exit 1
 
       - name: Install test dependency in API container
-        run: docker compose exec -T api pip install --no-cache-dir -r requirements-test.txt
+        run: |
+          docker compose exec -T api \
+            pip install --no-cache-dir -r requirements-test.txt
 
       - name: Run core tests
         run: |
-          docker compose exec -T api python -m pytest             tests/test_agent_unit.py             tests/test_knowledge_chunking.py             tests/test_scope_guard.py
+          docker compose exec -T \
+            -e MCP_SERVER_URL=http://mcp:8001/mcp \
+            api \
+            python -m pytest \
+            tests/test_agent_unit.py \
+            tests/test_knowledge_chunking.py \
+            tests/test_scope_guard.py \
+            tests/test_chat_followup_regression.py \
+            tests/test_mcp_http_transport.py \
+            -q
 
       - name: Show container status
         if: always()
@@ -61,6 +78,10 @@ jobs:
       - name: Show API logs on failure
         if: failure()
         run: docker compose logs api
+
+      - name: Show MCP logs on failure
+        if: failure()
+        run: docker compose logs mcp
 
       - name: Stop containers
         if: always()

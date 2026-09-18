@@ -55,5 +55,47 @@ services:
       retries: 12
       start_period: 15s
 
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: fleetops-mcp
+    restart: unless-stopped
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    env_file:
+      - .env.docker
+
+    environment:
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8001
+      MCP_PATH: /mcp
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    ports:
+      - "8001:8001"
+
+    command:
+      ["python", "-m", "app.mcp_http_server"]
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; s=socket.create_connection(('127.0.0.1',8001),3); s.close()"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
 volumes:
   fleetops_postgres_data:

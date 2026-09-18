@@ -32,10 +32,20 @@ def get_service_order_diagnostic(
     Retorna dados atuais da OS,
     contrato, fila e problemas encontrados.
     """
+    try:
+        return diagnose_service_order(
+            service_order_id
+        )
 
-    return diagnose_service_order(
-        service_order_id
-    )
+    except Exception as exc:
+        print(
+            "[MCP ERROR] "
+            "get_service_order_diagnostic "
+            f"service_order_id={service_order_id} "
+            f"error={type(exc).__name__}: {exc}",
+            flush=True,
+        )
+        raise
 
 
 # ============================================================
@@ -54,9 +64,19 @@ def search_knowledge(
     O trace_id permite correlacionar esta execucao
     com a requisicao HTTP e com os nodes do LangGraph.
     """
+    try:
+        return search_knowledge_rag(
+            query=query,
+            limit=limit,
+            trace_id=trace_id,
+        )
 
-    return search_knowledge_rag(
-        query=query,
-        limit=limit,
-        trace_id=trace_id,
-    )
+    except Exception as exc:
+        print(
+            "[MCP ERROR] "
+            "search_knowledge "
+            f"trace_id={trace_id} "
+            f"error={type(exc).__name__}: {exc}",
+            flush=True,
+        )
+        raise
