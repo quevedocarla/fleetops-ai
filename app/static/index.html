@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>FleetOps AI</title>
+
+    <link
+        rel="stylesheet"
+        href="/static/styles.css?v=7"
+    >
+</head>
+
+<body>
+
+    <div class="app-shell">
+
+        <header class="topbar">
+
+            <div class="brand">
+
+                <div class="brand-icon">
+                    AI
+                </div>
+
+                <div>
+                    <h1>FleetOps AI</h1>
+                    <span>
+                        Copiloto de Operações
+                    </span>
+                </div>
+
+            </div>
+
+
+            <div class="topbar-actions">
+
+                <div
+                    id="system-status"
+                    class="system-status online"
+                >
+                    <span class="status-dot"></span>
+                    Online
+                </div>
+
+
+                <button
+                    id="new-chat-button"
+                    class="secondary-button"
+                    type="button"
+                >
+                    Nova conversa
+                </button>
+
+            </div>
+
+        </header>
+
+
+        <main class="workspace">
+
+            <section class="chat-panel">
+
+                <div class="panel-header">
+
+                    <div>
+                        <h2>Assistente</h2>
+
+                        <p>
+                            Consulte uma Ordem de Serviço
+                            em linguagem natural.
+                        </p>
+                    </div>
+
+                    <div class="thread-info">
+
+                        <span>
+                            Conversa
+                        </span>
+
+                        <strong id="thread-id">
+                            -
+                        </strong>
+
+                    </div>
+
+                </div>
+
+
+                <div
+                    id="chat-messages"
+                    class="chat-messages"
+                >
+                </div>
+
+
+                <div
+                    id="warning-box"
+                    class="warning-box hidden"
+                >
+                    <strong>
+                        Atenção
+                    </strong>
+
+                    <div id="warning-content">
+                    </div>
+                </div>
+
+
+                <form
+                    id="chat-form"
+                    class="chat-form"
+                >
+
+                    <textarea
+                        id="message-input"
+                        rows="2"
+                        maxlength="2000"
+                        placeholder="Ex.: Por que a OS 10235 está bloqueada?"
+                    ></textarea>
+
+
+                    <button
+                        id="send-button"
+                        type="submit"
+                        class="primary-button"
+                    >
+                        Enviar
+                    </button>
+
+                </form>
+
+            </section>
+
+
+            <aside class="context-panel">
+
+                <div class="panel-header">
+
+                    <div>
+                        <h2>
+                            Contexto atual
+                        </h2>
+
+                        <p>
+                            Dados operacionais da OS
+                        </p>
+                    </div>
+
+                </div>
+
+
+                <div class="status-card">
+
+                    <div>
+
+                        <span class="label">
+                            Ordem de Serviço
+                        </span>
+
+                        <strong
+                            id="context-os"
+                            class="big-value"
+                        >
+                            -
+                        </strong>
+
+                    </div>
+
+
+                    <span
+                        id="diagnostic-badge"
+                        class="diagnostic-badge neutral"
+                    >
+                        SEM CONTEXTO
+                    </span>
+
+                </div>
+
+
+                <div class="context-grid">
+
+                    <div class="context-item">
+                        <span class="label">
+                            Status operacional
+                        </span>
+                        <strong id="context-status">
+                            -
+                        </strong>
+                    </div>
+
+
+                    <div class="context-item">
+                        <span class="label">
+                            Tipo
+                        </span>
+                        <strong id="context-type">
+                            -
+                        </strong>
+                    </div>
+
+
+                    <div class="context-item">
+                        <span class="label">
+                            Placa
+                        </span>
+                        <strong id="context-plate">
+                            -
+                        </strong>
+                    </div>
+
+
+                    <div class="context-item">
+                        <span class="label">
+                            Contrato
+                        </span>
+                        <strong id="context-contract">
+                            -
+                        </strong>
+                    </div>
+
+
+                    <div class="context-item">
+                        <span class="label">
+                            Status contrato
+                        </span>
+                        <strong id="context-contract-status">
+                            -
+                        </strong>
+                    </div>
+
+
+                    <div class="context-item">
+                        <span class="label">
+                            Fila
+                        </span>
+                        <strong id="context-queue">
+                            -
+                        </strong>
+                    </div>
+
+                </div>
+
+
+                <div class="context-section">
+
+                    <h3>
+                        Problemas encontrados
+                    </h3>
+
+                    <div
+                        id="problems-list"
+                        class="problems-list"
+                    >
+
+                        <div class="empty-state">
+                            Nenhum diagnóstico carregado.
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="context-section technical-section">
+
+                    <h3>
+                        Execução
+                    </h3>
+
+
+                    <div class="technical-row">
+
+                        <span>
+                            Trace ID
+                        </span>
+
+                        <code id="trace-id">
+                            -
+                        </code>
+
+                    </div>
+
+
+                    <div class="technical-row">
+
+                        <span>
+                            Modo
+                        </span>
+
+                        <strong id="execution-mode">
+                            Normal
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </aside>
+
+        </main>
+
+    </div>
+
+
+    <script src="/static/app.js?v=7"></script>
+
+</body>
+
+</html>

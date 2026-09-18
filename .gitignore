@@ -1,0 +1,32 @@
+﻿# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Variáveis de ambiente / segredos
+.env
+.env.docker
+.env.*
+!.env.example
+!.env.docker.example
+
+# IDE
+.vscode/
+.idea/
+
+# Testes / caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Logs
+*.log
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
