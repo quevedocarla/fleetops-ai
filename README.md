@@ -1,5 +1,7 @@
 # FleetOps AI
 
+[![CI](https://github.com/quevedocarla/fleetops-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/quevedocarla/fleetops-ai/actions/workflows/ci.yml)
+
 **AI Operations Copilot para diagnóstico de Ordens de Serviço com RAG, LangGraph, MCP, memória, observabilidade e Docker.**
 
 O FleetOps AI é um MVP de portfólio criado para demonstrar uma arquitetura de IA aplicada a operações.  
