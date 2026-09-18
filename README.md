@@ -1,28 +1,62 @@
 # FleetOps AI
 
-MVP de um **AI Operations Copilot** para diagnóstico de Ordens de Serviço, combinando dados operacionais estruturados, RAG, LangGraph, MCP, memória persistente, observabilidade e execução containerizada com Docker.
+**AI Operations Copilot para diagnóstico de Ordens de Serviço com RAG, LangGraph, MCP, memória, observabilidade e Docker.**
 
-## Visão geral
+O FleetOps AI é um MVP de portfólio criado para demonstrar uma arquitetura de IA aplicada a operações.  
+A solução combina **dados estruturados**, **regras recuperadas por RAG** e **IA generativa** para explicar diagnósticos de forma rastreável e controlada.
 
-O FleetOps AI foi criado como um projeto de portfólio para demonstrar uma arquitetura de IA aplicada a operações.
+> **Princípio central:** fatos vêm do banco e das ferramentas; regras vêm do RAG; o LLM interpreta e explica.
 
-A aplicação responde perguntas como:
+![Arquitetura do FleetOps AI](./diagrama%20de%20arquitetura.png)
+
+---
+
+## Destaques técnicos
+
+- FastAPI como camada HTTP
+- LangGraph para orquestração do agente
+- MCP para exposição de ferramentas
+- PostgreSQL + pgvector para dados e embeddings
+- RAG com chunking customizado
+- Ollama com modelos locais
+- memória persistente por `thread_id`
+- fast path para perguntas factuais
+- scope guard para bloquear perguntas fora do domínio
+- fallback seguro para falhas de RAG/LLM
+- observabilidade com `trace_id` e logs estruturados
+- Docker Compose com healthchecks
+- testes unitários e de integração
+- **32 testes homologados**
+
+---
+
+## Problema que o projeto resolve
+
+Em operações, muitas perguntas exigem combinar dados de diferentes fontes e regras de negócio.
+
+Exemplo:
 
 ```text
 Por que a OS 10235 está bloqueada?
 ```
 
-O sistema não usa o LLM como fonte da verdade.
-
-A arquitetura segue este princípio:
+O FleetOps consulta:
 
 ```text
-Fatos operacionais → banco / ferramentas
-Regras             → RAG
-LLM                → interpretação e explicação
+Ordem de Serviço
++ contrato relacionado
++ fila de processamento
++ regras operacionais
 ```
 
-Isso reduz alucinações e mantém a resposta baseada em dados e regras conhecidas.
+e retorna uma explicação objetiva.
+
+Exemplo de resposta:
+
+```text
+A OS 10235 está bloqueada porque o contrato 2002 está inativo.
+O contrato precisa ser regularizado para que a OS seja processada.
+```
 
 ---
 
@@ -48,83 +82,42 @@ Ollama
 Resposta
 ```
 
-### Responsabilidades
+### Separação de responsabilidades
 
-- **FastAPI**: expõe a API HTTP.
-- **LangGraph**: orquestra o fluxo do agente.
-- **Scope Guard**: impede respostas fora do domínio operacional.
-- **MCP**: expõe ferramentas de diagnóstico e busca de conhecimento.
-- **PostgreSQL**: armazena dados operacionais fictícios.
-- **pgvector**: armazena embeddings da base de conhecimento.
-- **RAG**: recupera regras e procedimentos relevantes.
-- **Ollama**: executa os modelos locais.
-- **Docker**: empacota API e banco em containers reproduzíveis.
+```text
+Fatos operacionais  → PostgreSQL / ferramentas
+Regras              → RAG
+Orquestração        → LangGraph
+Integrações         → MCP
+Explicação          → LLM
+Proteção de domínio → Scope Guard
+```
+
+Essa separação reduz o risco de o modelo inventar fatos operacionais.
 
 ---
 
-## Tecnologias
+## Fluxos de resposta
 
-- Python 3.12
-- FastAPI
-- LangGraph
-- MCP
-- PostgreSQL
-- pgvector
-- SQLAlchemy
-- psycopg
-- Pydantic
-- Ollama
-- Qwen 2.5
-- EmbeddingGemma
-- Docker
-- Docker Compose
-- Pytest
-- HTML
-- CSS
-- JavaScript
+O agente possui três modos principais.
 
----
+### `AI`
 
-## Funcionalidades
+Usado quando a pergunta exige análise.
 
-### Diagnóstico operacional
-
-Consulta uma Ordem de Serviço e combina:
-
-- dados da OS;
-- contrato relacionado;
-- fila de processamento;
-- status operacional;
-- problemas identificados.
-
-### RAG
-
-As regras operacionais são consultadas semanticamente antes da geração da resposta.
-
-Arquivos atuais da base de conhecimento:
+Fluxo:
 
 ```text
-docs/contracts.md
-docs/processing.md
-docs/troubleshooting.md
+diagnóstico
+→ busca de conhecimento
+→ RAG
+→ LLM
+→ resposta
 ```
 
-### Memória
+### `DIRECT`
 
-O agente utiliza `thread_id` para manter contexto entre perguntas.
-
-Exemplo:
-
-```text
-Por que a OS 10235 está bloqueada?
-qual o contrato dela?
-```
-
-A segunda pergunta reutiliza o contexto da primeira.
-
-### Fast path
-
-Perguntas factuais simples podem ser respondidas diretamente, sem chamar o LLM.
+Usado para perguntas factuais simples.
 
 Exemplos:
 
@@ -134,9 +127,11 @@ qual a placa dela?
 qual o status da fila?
 ```
 
-### Scope Guard
+Essas respostas não precisam chamar o LLM.
 
-Perguntas fora do domínio são bloqueadas antes de acessar RAG ou LLM.
+### `OUT_OF_SCOPE`
+
+Perguntas fora do domínio são bloqueadas antes do RAG e do LLM.
 
 Exemplo:
 
@@ -144,78 +139,132 @@ Exemplo:
 como fazer bolo de cenoura?
 ```
 
-Resultado:
+Resposta:
 
 ```text
-response_mode: OUT_OF_SCOPE
+Posso ajudar com assuntos do FleetOps, como Ordens de Serviço,
+contratos, placas, filas de processamento e diagnósticos operacionais.
+Essa pergunta está fora desse escopo.
 ```
-
-### Resiliência
-
-O projeto possui cenários simulados de falha para:
-
-- diagnóstico;
-- RAG;
-- LLM.
-
-Em caso de falha do LLM ou RAG, respostas determinísticas podem ser usadas como fallback.
-
-### Observabilidade
-
-Cada execução utiliza:
-
-- `trace_id`;
-- `thread_id`;
-- logs estruturados em JSON;
-- tempos de execução;
-- eventos por etapa do fluxo.
 
 ---
 
-## Modos de resposta
+## Memória de conversa
 
-O agente pode responder em diferentes modos:
+O agente mantém contexto através de `thread_id`.
 
-```text
-AI
-DIRECT
-OUT_OF_SCOPE
-```
-
-### AI
-
-Fluxo completo com diagnóstico, RAG e LLM.
-
-### DIRECT
-
-Resposta factual usando fast path.
-
-### OUT_OF_SCOPE
-
-Resposta determinística para perguntas fora do domínio.
-
----
-
-## Exemplo
-
-Pergunta:
+Exemplo:
 
 ```text
-Por que a OS 10235 está bloqueada?
-```
+Usuário: Por que a OS 10235 está bloqueada?
 
-Resposta esperada:
-
-```text
+FleetOps:
 A OS 10235 está bloqueada porque o contrato 2002 está inativo.
-O contrato precisa ser regularizado para que a OS seja processada.
+
+Usuário: qual o contrato dela?
+
+FleetOps:
+O contrato da OS 10235 é o 2002.
 ```
 
-Evidências recuperadas pelo RAG incluem a regra:
+A segunda pergunta reutiliza o contexto anterior.
+
+---
+
+## RAG
+
+A base de conhecimento atual é composta por:
+
+```text
+docs/contracts.md
+docs/processing.md
+docs/troubleshooting.md
+```
+
+O processo de ingestão:
+
+```text
+Markdown
+→ chunking
+→ embedding
+→ pgvector
+→ busca semântica
+```
+
+### Chunking customizado
+
+O projeto possui uma regra específica para manter identificadores junto de suas descrições.
+
+Exemplo:
 
 ```text
 CONTR-001
+
+Uma Ordem de Serviço de instalação somente pode ser processada
+quando o contrato relacionado estiver com status ACTIVE.
 ```
+
+Isso evita que o ID da regra e seu conteúdo sejam armazenados em chunks separados.
+
+A ingestão também usa uma whitelist para impedir que documentação interna e checkpoints entrem no RAG.
+
+---
+
+## MCP
+
+O projeto expõe ferramentas operacionais através do MCP.
+
+Exemplos:
+
+```text
+get_service_order_diagnostic
+search_knowledge
+```
+
+A função do MCP é separar o agente das fontes operacionais e permitir que as ferramentas tenham contratos claros.
+
+---
+
+## Observabilidade
+
+Cada execução pode ser acompanhada através de:
+
+- `trace_id`
+- `thread_id`
+- logs estruturados em JSON
+- tempos de execução
+- eventos do agente
+
+Eventos incluem:
+
+```text
+application_starting
+agent_graph_ready
+agent_chat_started
+intent_detected
+agent_scope_decision
+rag_search_completed
+llm_completed
+http_request_completed
+```
+
+---
+
+## Resiliência
+
+O FleetOps possui mecanismos para testar falhas de dependências:
+
+```text
+FLEETOPS_FORCE_DIAGNOSTIC_ERROR
+FLEETOPS_FORCE_RAG_ERROR
+FLEETOPS_FORCE_LLM_ERROR
+```
+
+Comportamentos implementados:
+
+- falha de LLM → fallback determinístico
+- falha de RAG → resposta segura sem inventar conhecimento
+- falha de diagnóstico → erro controlado
 
 ---
 
@@ -230,13 +279,19 @@ fleetops-api
 fleetops-postgres
 ```
 
+O Ollama roda no host e é acessado pelo container através de:
+
+```text
+http://host.docker.internal:11434
+```
+
 ### Subir o ambiente
 
 ```powershell
 docker compose up -d
 ```
 
-### Ver status
+### Verificar
 
 ```powershell
 docker compose ps
@@ -249,48 +304,61 @@ fleetops-api        healthy
 fleetops-postgres   healthy
 ```
 
-### Ver logs
+### Healthcheck
 
 ```powershell
-docker compose logs api
+Invoke-RestMethod http://localhost:8000/health
 ```
 
-### Parar
-
-```powershell
-docker compose down
-```
-
-> Evite `docker compose down -v` caso queira preservar o volume do PostgreSQL.
-
----
-
-## Ollama
-
-O Ollama roda no host Windows e é acessado pela API Docker através de:
+Resposta esperada:
 
 ```text
-http://host.docker.internal:11434
-```
-
-Modelos utilizados:
-
-```text
-qwen2.5:1.5b-instruct
-embeddinggemma
-```
-
-Modelo adicional disponível:
-
-```text
-qwen2.5:3b
+status  service
+------  -------
+ok      fleetops-ai
 ```
 
 ---
 
-## Ingestão da base de conhecimento
+## Setup rápido
 
-Após criar um banco novo:
+### 1. Clonar
+
+```powershell
+git clone https://github.com/quevedocarla/fleetops-ai.git
+cd fleetops-ai
+```
+
+### 2. Criar os arquivos de ambiente
+
+Para desenvolvimento local:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Para Docker:
+
+```powershell
+Copy-Item .env.docker.example .env.docker
+```
+
+Ajuste as senhas antes de subir o ambiente.
+
+### 3. Preparar Ollama
+
+```powershell
+ollama pull qwen2.5:1.5b-instruct
+ollama pull embeddinggemma
+```
+
+### 4. Subir Docker
+
+```powershell
+docker compose up -d --build
+```
+
+### 5. Ingerir conhecimento
 
 ```powershell
 docker compose exec api python -m app.ingest_knowledge
@@ -302,13 +370,11 @@ Resultado esperado:
 Ingestao concluida. 12 chunks gravados.
 ```
 
-O ingest utiliza uma whitelist para evitar que documentação interna e checkpoints entrem no RAG.
-
 ---
 
 ## Testes
 
-Executar:
+Execute:
 
 ```powershell
 python -m pytest
@@ -322,92 +388,109 @@ Estado homologado:
 
 Os testes cobrem:
 
-- health endpoint;
-- diagnóstico de OS;
-- RAG;
-- memória;
-- fast path;
-- scope guard;
-- chunking;
-- respostas diretas;
-- falha forçada de RAG;
-- falha forçada de LLM;
-- falha forçada de diagnóstico;
-- integrações do fluxo principal.
+- API
+- diagnóstico
+- memória
+- fast path
+- RAG
+- chunking
+- scope guard
+- fallback
+- falha de diagnóstico
+- falha de RAG
+- falha de LLM
+- integração ponta a ponta
 
 ---
 
-## Estrutura principal
+## Estrutura do projeto
 
 ```text
 fleetops-ai/
 │
 ├── app/
+│   ├── api/
 │   ├── core/
 │   ├── models/
+│   ├── rag/
+│   ├── repositories/
+│   ├── schemas/
 │   ├── services/
+│   ├── static/
+│   ├── tools/
+│   ├── agent_graph.py
+│   ├── ingest_knowledge.py
 │   ├── main.py
-│   ├── mcp_server.py
-│   └── ingest_knowledge.py
-│
-├── docs/
-│   ├── contracts.md
-│   ├── processing.md
-│   ├── troubleshooting.md
-│   └── CHECKPOINT_*.md
+│   └── mcp_server.py
 │
 ├── docker/
 │   └── postgres/
 │       └── 001_init.sql
 │
+├── docs/
+├── experiments/
 ├── tests/
 │
 ├── Dockerfile
 ├── docker-compose.yml
 ├── pytest.ini
 ├── requirements.txt
-├── README_CHUNKING.md
-├── README_DOCKER.md
-├── README_SCOPE_GUARD.md
-├── README_TESTES.md
 └── README.md
 ```
 
 ---
 
-## Documentação complementar
+## Tecnologias
 
-Documentos específicos existentes no projeto:
+| Área | Tecnologia |
+|---|---|
+| API | FastAPI |
+| Orquestração | LangGraph |
+| Ferramentas | MCP |
+| Banco | PostgreSQL |
+| Vetores | pgvector |
+| ORM | SQLAlchemy |
+| Validação | Pydantic |
+| LLM local | Ollama / Qwen 2.5 |
+| Embeddings | EmbeddingGemma |
+| Containerização | Docker / Docker Compose |
+| Testes | Pytest |
+| Frontend | HTML / CSS / JavaScript |
 
-```text
-README_CHUNKING.md
-README_DOCKER.md
-README_SCOPE_GUARD.md
-README_TESTES.md
-```
+---
 
-Checkpoints do projeto ficam em:
+## Decisões de arquitetura
 
-```text
-docs/
-```
+### LLM não é fonte da verdade
+
+O modelo não decide sozinho se uma OS está bloqueada.
+
+O diagnóstico é produzido a partir dos dados operacionais e regras disponíveis.
+
+### Fast path reduz custo e latência
+
+Perguntas simples não precisam passar pelo LLM.
+
+### Scope Guard limita o domínio
+
+Perguntas fora do FleetOps são interrompidas antes de consumir RAG ou geração.
+
+### RAG usa conhecimento operacional explícito
+
+As regras podem ser atualizadas independentemente do código do modelo.
+
+### Docker torna o ambiente reproduzível
+
+API e banco podem ser reconstruídos com configuração conhecida.
 
 ---
 
 ## Estado atual
 
-O FleetOps AI está em estado de:
-
 ```text
-MVP funcional, testado e containerizado.
-```
-
-Itens homologados:
-
-```text
-[OK] Banco PostgreSQL
-[OK] pgvector
 [OK] FastAPI
+[OK] PostgreSQL
+[OK] pgvector
 [OK] LangGraph
 [OK] MCP
 [OK] RAG
@@ -419,44 +502,67 @@ Itens homologados:
 [OK] Resiliência
 [OK] Frontend
 [OK] Docker
-[OK] Healthcheck
-[OK] Testes automatizados
+[OK] Healthchecks
+[OK] 32 testes automatizados
 ```
 
 ---
 
 ## Próximas evoluções
 
-- diagrama visual de arquitetura;
-- script de setup do zero;
-- roteiro de demonstração;
-- separação entre `.env` local e `.env.docker`;
-- transporte MCP externo;
-- integração futura com SQL Server;
-- adaptação futura para Sankhya;
-- deploy em ambiente remoto.
+- transporte MCP externo
+- refinamento do pipeline de avaliação
+- métricas de qualidade do RAG
+- CI/CD
+- deploy remoto
+- integração com SQL Server
+- adaptação para Sankhya
+- ferramentas operacionais específicas por domínio
 
 ---
 
-## Objetivo futuro
+## Documentação complementar
 
-A arquitetura fictícia do FleetOps foi construída para validar conceitos antes de uma futura adaptação para um ambiente corporativo real com:
+- `README_DOCKER.md`
+- `README_TESTES.md`
+- `README_CHUNKING.md`
+- `README_SCOPE_GUARD.md`
+- `docs/SETUP_DO_ZERO.md`
+- `docs/ROTEIRO_DEMONSTRACAO.md`
+- `docs/CHECKPOINT_5_DOCKER.md`
+
+---
+
+## Objetivo do projeto
+
+O FleetOps AI foi construído para validar, em um ambiente fictício e controlado, conceitos que podem ser aplicados depois em sistemas corporativos reais.
+
+A evolução prevista é reaproveitar a mesma arquitetura com:
 
 ```text
 Sankhya
 SQL Server
 Ordens de Serviço
-regras operacionais
-diagnóstico
-integrações
+regras operacionais reais
+integrações corporativas
 ```
 
-O objetivo é manter a mesma separação arquitetural:
+mantendo a separação:
 
 ```text
-dados operacionais confiáveis
+dados confiáveis
 +
 regras recuperadas
 +
-LLM como camada de interpretação
+IA como camada de interpretação
+```
+
+---
+
+## Repositório
+
+GitHub:
+
+```text
+https://github.com/quevedocarla/fleetops-ai
 ```
