@@ -1,0 +1,173 @@
+[
+  {
+    "id": "rag-001",
+    "question": "Quando uma OS de instalação pode ser processada?",
+    "relevant_source_prefixes": [
+      "contracts.md"
+    ],
+    "expected_terms": [
+      "CONTR-001",
+      "ACTIVE"
+    ]
+  },
+  {
+    "id": "rag-002",
+    "question": "Uma OS de instalação pode ser processada com o contrato inativo?",
+    "relevant_source_prefixes": [
+      "contracts.md"
+    ],
+    "expected_terms": [
+      "CONTR-001",
+      "ACTIVE"
+    ]
+  },
+  {
+    "id": "rag-003",
+    "question": "Qual regra trata o bloqueio de instalação por contrato inativo?",
+    "relevant_source_prefixes": [
+      "contracts.md"
+    ],
+    "expected_terms": [
+      "CONTR-001"
+    ]
+  },
+  {
+    "id": "rag-004",
+    "question": "Contrato inativo pode deixar a ordem de serviço bloqueada?",
+    "relevant_source_prefixes": [
+      "contracts.md",
+      "troubleshooting.md"
+    ],
+    "expected_terms": [
+      "INACTIVE"
+    ]
+  },
+  {
+    "id": "rag-005",
+    "question": "Quais documentos explicam regras de processamento de ordens de serviço?",
+    "relevant_source_prefixes": [
+      "processing.md"
+    ],
+    "expected_terms": []
+  },
+  {
+    "id": "rag-006",
+    "question": "Onde procuro orientação para investigar uma OS com problema de processamento?",
+    "relevant_source_prefixes": [
+      "troubleshooting.md"
+    ],
+    "expected_terms": []
+  },
+  {
+    "id": "rag-007",
+    "question": "Por que uma instalação fica parada quando o contrato não está ativo?",
+    "relevant_source_prefixes": [
+      "contracts.md",
+      "troubleshooting.md"
+    ],
+    "expected_terms": [
+      "ACTIVE"
+    ]
+  },
+  {
+    "id": "rag-008",
+    "question": "O que impede o processamento de uma OS de instalação?",
+    "relevant_source_prefixes": [
+      "contracts.md",
+      "processing.md"
+    ],
+    "expected_terms": []
+  },
+  {
+    "id": "rag-009",
+    "question": "Tenho uma instalação pendente e o contrato está INACTIVE. O que devo verificar?",
+    "relevant_source_prefixes": [
+      "contracts.md",
+      "troubleshooting.md"
+    ],
+    "expected_terms": [
+      "INACTIVE"
+    ]
+  },
+  {
+    "id": "rag-010",
+    "question": "Qual conhecimento usar para explicar erro de fila em uma ordem de serviço?",
+    "relevant_source_prefixes": [
+      "processing.md",
+      "troubleshooting.md"
+    ],
+    "expected_terms": []
+  },
+  {
+    "id": "rag-011",
+    "question": "A OS está com erro de processamento. Onde encontro passos para diagnóstico?",
+    "relevant_source_prefixes": [
+      "troubleshooting.md"
+    ],
+    "expected_terms": []
+  },
+  {
+    "id": "rag-012",
+    "question": "Quero entender as regras gerais da fila de processamento.",
+    "relevant_source_prefixes": [
+      "processing.md"
+    ],
+    "expected_terms": []
+  },
+  {
+    "id": "rag-013",
+    "question": "Se o contrato estiver ativo, isso elimina o bloqueio de instalação por contrato?",
+    "relevant_source_prefixes": [
+      "contracts.md"
+    ],
+    "expected_terms": [
+      "ACTIVE"
+    ]
+  },
+  {
+    "id": "rag-014",
+    "question": "Existe alguma regra específica para instalação vinculada a contrato?",
+    "relevant_source_prefixes": [
+      "contracts.md"
+    ],
+    "expected_terms": [
+      "CONTR-001"
+    ]
+  },
+  {
+    "id": "rag-015",
+    "question": "Como diferenciar problema de regra de contrato de problema de processamento?",
+    "relevant_source_prefixes": [
+      "contracts.md",
+      "processing.md",
+      "troubleshooting.md"
+    ],
+    "expected_terms": []
+  },
+  {
+    "id": "rag-016",
+    "question": "Qual documento fala de troubleshooting de OS?",
+    "relevant_source_prefixes": [
+      "troubleshooting.md"
+    ],
+    "expected_terms": []
+  },
+  {
+    "id": "rag-017",
+    "question": "Qual documento fala de contrato e status necessários para instalação?",
+    "relevant_source_prefixes": [
+      "contracts.md"
+    ],
+    "expected_terms": [
+      "ACTIVE"
+    ]
+  },
+  {
+    "id": "rag-018",
+    "question": "Onde estão descritas as regras de processamento da OS?",
+    "relevant_source_prefixes": [
+      "processing.md"
+    ],
+    "expected_terms": []
+  }
+]
